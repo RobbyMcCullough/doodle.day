@@ -1,0 +1,490 @@
+import { mkdir, writeFile } from "node:fs/promises";
+
+const siteUrl = "https://doodle.localhost";
+const siteName = "Doodle.day";
+const siteSlug = "doodle";
+const iconLinks = `  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="/assets/site-icon.png">`;
+
+const lessons = [
+  {
+    slug: "hot-rod-marker-flames",
+    day: "001",
+    date: "Wednesday, June 24",
+    isoDate: "2026-06-24",
+    subject: "hot rod marker flames",
+    headlineSubject: "hot rod<br>marker flames",
+    shortSubject: "hot rod marker flames",
+    lessonTitle: "Let's doodle flames",
+    description: "Learn how to draw hot rod-style marker flames with bold black outlines, orange fill, yellow inner flames, red edge accents, and handmade marker texture.",
+    intro: "Try a bolder Doodle.day mode: black felt-tip outlines, bright marker fill, and a simple flame shape that feels more comic panel than pencil sketch.",
+    time: 15,
+    difficulty: "Easy",
+    accent: "#f05a28",
+    finished: "hot-rod-marker-flames-finished-v1.jpg",
+    finishedAlt: "Bold marker doodle of hot rod-style flames with black outline, orange fill, yellow inner flames, and red edge accents",
+    materials: ["Drawing paper", "Black marker", "Orange and yellow markers", "Optional red marker"],
+    materialNote: "Use scrap paper underneath; marker can bleed through.",
+    tipLabel: "Doodle tip",
+    steps: [
+      {
+        name: "Sweep the flame paths",
+        text: "Draw a low curved baseline, then pull three tall swooping paths upward like stretched S-curves.",
+        tip: "Let the middle path be tallest. The side paths can lean outward to make the shape feel fast."
+      },
+      {
+        name: "Connect the outside shape",
+        text: "Use the guide paths to make one connected flame outline with pointed tips and rounded dips between them.",
+        tip: "Keep the valleys round. Sharp valleys make the flames look thorny instead of hot rod-style."
+      },
+      {
+        name: "Thicken the outline",
+        text: "Trace the outside shape with a bold black marker, pressing slowly around the curves and points.",
+        tip: "A slightly uneven marker edge is fine. Aim for energy, not perfect symmetry."
+      },
+      {
+        name: "Add inner flames",
+        text: "Draw two smaller flame tongues inside the big shape, letting them rise from the baseline and curve with the outer flames.",
+        tip: "Leave enough orange space around the inner flames so the yellow fill will stand out."
+      },
+      {
+        name: "Fill with marker color",
+        text: "Fill the outer flame with orange, color the inner shapes yellow, and add a few red accents along the outside edges.",
+        tip: "Color in short strokes and let a few streaks show. Marker texture makes the doodle feel handmade."
+      },
+      {
+        name: "Punch up the doodle",
+        text: "Go back over the black outline, strengthen the orange and yellow fill, and clean only the edges you already drew.",
+        tip: "Do not add new flame shapes at the end. The final pass should make the marker drawing louder.",
+        image: true
+      }
+    ]
+  }
+];
+
+const archiveLessons = [...lessons]
+  .sort((first, second) => new Date(second.isoDate) - new Date(first.isoDate));
+const latestLesson = archiveLessons[0];
+
+const relatedCards = (currentSlug) => lessons
+  .filter(({ slug }) => slug !== currentSlug)
+  .slice(0, 3)
+  .map((lesson) => `
+    <a class="sketch-card" href="${lesson.slug}.html">
+      <div class="card-art"><img src="../assets/${lesson.finished}" alt=""></div>
+      <p>${lesson.time} min · ${lesson.difficulty}</p>
+      <h3>How to draw ${lesson.shortSubject}</h3>
+    </a>`)
+  .join("");
+
+const materialIcon = (index) => ["paper-icon", "pencil-icon", "colors-icon", "colors-icon"][index];
+const titleCase = (value) => value.replace(/\b\w/g, (character) => character.toUpperCase());
+const headlineHtml = (value) => String(value)
+  .split(/<br\s*\/?>/i)
+  .map((line) => `<span>${line.trim()}</span>`)
+  .join(" ");
+const escapeXml = (value) => String(value)
+  .replaceAll("&", "&amp;")
+  .replaceAll("<", "&lt;")
+  .replaceAll(">", "&gt;")
+  .replaceAll('"', "&quot;")
+  .replaceAll("'", "&apos;");
+const lessonUrl = (lesson) => `${siteUrl}/tutorials/${lesson.slug}.html`;
+const lessonImageUrl = (lesson) => `${siteUrl}/assets/${lesson.finished}`;
+const rssPubDate = (isoDate) => new Date(`${isoDate}T12:00:00-07:00`).toUTCString();
+
+const orgNode = {
+  "@type": "Organization",
+  "@id": `${siteUrl}/#organization`,
+  name: siteName,
+  url: `${siteUrl}/`,
+  logo: `${siteUrl}/assets/site-icon.png`
+};
+const siteNode = {
+  "@type": "WebSite",
+  "@id": `${siteUrl}/#website`,
+  name: siteName,
+  url: `${siteUrl}/`,
+  description: "One bold marker doodle prompt and practical step-by-step tutorial every day.",
+  publisher: { "@id": `${siteUrl}/#organization` }
+};
+
+const page = (lesson) => {
+  const titleSubject = titleCase(lesson.shortSubject.replace(/^a /, ""));
+  const schema = {
+    "@context": "https://schema.org",
+    "@graph": [
+      orgNode,
+      siteNode,
+      {
+        "@type": "HowTo",
+        "@id": `${lessonUrl(lesson)}#howto`,
+        name: `How to Draw ${titleSubject}`,
+        description: lesson.description,
+        image: `${siteUrl}/assets/${lesson.finished}`,
+        datePublished: lesson.isoDate,
+        dateModified: lesson.updated || lesson.isoDate,
+        author: { "@id": `${siteUrl}/#organization` },
+        publisher: { "@id": `${siteUrl}/#organization` },
+        totalTime: `PT${lesson.time}M`,
+        supply: lesson.materials.map((name) => ({ "@type": "HowToSupply", name })),
+        step: lesson.steps.map(({ name, text }) => ({ "@type": "HowToStep", name, text }))
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "Home", item: `${siteUrl}/` },
+          { "@type": "ListItem", position: 2, name: "Doodle library", item: `${siteUrl}/library.html` },
+          { "@type": "ListItem", position: 3, name: `How to draw ${lesson.subject}`, item: lessonUrl(lesson) }
+        ]
+      }
+    ]
+  };
+
+  const steps = lesson.steps.map((step, index) => `
+          <li class="step-card${step.image ? " final-step" : ""}">
+            <button class="step-check" type="button" aria-label="Mark step ${index + 1} complete"><span></span></button>
+            <div class="step-number">${String(index + 1).padStart(2, "0")}</div>
+            <div class="step-art${step.image ? " finished-mini" : ""}">
+              ${step.image
+                ? `<img src="../assets/${lesson.finished}" alt="${lesson.finishedAlt}" width="1254" height="1254">`
+                : `<img src="../assets/${lesson.slug}-step-${index + 1}.jpg" alt="${step.name} stage for how to draw ${lesson.shortSubject}" width="627" height="627">`}
+            </div>
+            <div class="step-copy">
+              <h3>${step.name}</h3>
+              <p>${step.text}</p>
+              <p class="artist-tip"><strong>${lesson.tipLabel ?? "Doodle tip"}:</strong> ${step.tip}</p>
+            </div>
+          </li>`).join("");
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>How to Draw ${titleSubject} Step by Step | ${siteName}</title>
+  <meta name="description" content="${lesson.description}">
+  <link rel="canonical" href="${lessonUrl(lesson)}">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="How to Draw ${titleSubject}, Step by Step">
+  <meta property="og:description" content="${lesson.description}">
+  <meta property="og:url" content="${lessonUrl(lesson)}">
+  <meta property="og:image" content="${lessonImageUrl(lesson)}">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="theme-color" content="${lesson.accent}">
+${iconLinks}
+  <link rel="alternate" type="application/rss+xml" title="${siteName} daily doodle feed" href="${siteUrl}/feed.xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat+Brush&family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../styles.css">
+  <script type="application/ld+json">${JSON.stringify(schema, null, 2)}</script>
+</head>
+<body class="archive-tutorial doodle-site" style="--lesson-accent: ${lesson.accent}">
+  <a class="skip-link" href="#lesson">Skip to the doodle</a>
+  <header class="site-header">
+    <div class="brand">
+      <img class="brand-mark" src="../assets/logo-pencil.svg" alt="" width="72" height="72">
+      <a class="brand-wordmark" href="../index.html" aria-label="${siteName} home"><span class="brand-name">${siteSlug}<span>.day</span></span></a>
+    </div>
+    <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span></span><span></span><span></span><span class="sr-only">Open menu</span></button>
+    <nav class="site-nav" id="site-nav" aria-label="Main navigation">
+      <a href="../index.html">Today's doodle</a>
+      <a href="../library.html">Doodle library</a>
+      <a href="../index.html#about">How it works</a>
+      <a class="nav-button" href="#lesson">Start doodling</a>
+    </nav>
+  </header>
+  <main>
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="doodle doodle-star" aria-hidden="true">✦</div>
+      <div class="hero-copy">
+        <p class="eyebrow">${lesson.date}</p>
+        <h1 id="hero-title" aria-label="How to draw ${lesson.subject}"><span class="headline-lead">How to draw</span> <em aria-hidden="true">${headlineHtml(lesson.headlineSubject ?? lesson.subject)}</em></h1>
+        <p class="hero-intro">${lesson.intro}</p>
+        <div class="hero-meta" aria-label="Lesson details"><span><strong>${lesson.time}</strong> min</span><span><strong>${lesson.difficulty}</strong></span></div>
+        <a class="nav-button hero-button" href="#lesson">Start doodling <svg viewBox="0 0 30 15" aria-hidden="true"><path d="M1 7.5h26M20 1l7 6.5-7 6.5"/></svg></a>
+      </div>
+      <figure class="hero-art">
+        <div class="tape tape-top" aria-hidden="true"></div>
+        <img src="../assets/${lesson.finished}" alt="${lesson.finishedAlt}" width="1254" height="1254">
+        <figcaption>Finished doodle <span>About ${lesson.time} minutes</span></figcaption>
+      </figure>
+    </section>
+    <article class="lesson" id="lesson">
+      <header class="section-heading">
+        <p class="kicker">Felt-tip marker mode</p>
+        <h2>${lesson.lessonTitle}</h2>
+        <p>Use loose curves first, then switch to confident marker outlines and bright fills.</p>
+      </header>
+      <div class="lesson-layout">
+        <aside class="materials paper-panel" aria-labelledby="materials-title">
+          <div class="pushpin" aria-hidden="true"></div>
+          <p class="hand-note">Grab your stuff</p>
+          <h3 id="materials-title">Materials</h3>
+          <ul>${lesson.materials.map((material, index) => `<li><span class="material-icon ${materialIcon(index)}" aria-hidden="true"></span><div><strong>${material}</strong><small>${index === 0 ? "Smooth paper helps marker lines" : index === 1 ? "Fine tip or felt tip" : index === 2 ? "Main flame colors" : "For edge accents"}</small></div></li>`).join("")}</ul>
+          <p class="materials-note">${lesson.materialNote}</p>
+        </aside>
+        <ol class="steps">${steps}
+        </ol>
+      </div>
+    </article>
+    <section class="library related-library" id="related" aria-labelledby="related-title">
+      <header class="section-heading library-heading"><div><p class="kicker">Keep the marker moving</p><h2 id="related-title">More daily doodles</h2></div><a href="../library.html">Browse the full library <span aria-hidden="true">→</span></a></header>
+      <div class="library-grid">${relatedCards(lesson.slug)}
+      </div>
+    </section>
+  </main>
+  <footer class="site-footer">
+    <a class="brand footer-brand" href="../index.html"><span class="brand-name">${siteSlug}<span>.day</span></span></a>
+    <p>Make a bold mark. See what happens.</p>
+    <nav aria-label="Footer navigation"><a href="../index.html">Today</a><a href="../library.html">Library</a><a href="../index.html#about">About</a><a href="mailto:hello@doodle.day">Say hello</a></nav>
+    <small>© 2026 ${siteName}</small>
+  </footer>
+  <script src="../script.js"></script>
+</body>
+</html>`;
+};
+
+const homePage = (lesson) => {
+  const homeOnlySections = `
+    <section class="about" id="about">
+      <div class="about-drawing">
+        <img src="assets/${lesson.finished}" alt="${lesson.finishedAlt}" width="780" height="780">
+      </div>
+      <div class="about-copy">
+        <p class="kicker">One small doodle, every day</p>
+        <h2>A daily marker habit for playful hands.</h2>
+        <p>Doodle.day is the louder sibling to Sketcha.day: simple shapes, bold outlines, bright marker color, and small comic-style drawing ideas you can finish in one sitting.</p>
+        <div class="about-points">
+          <p><strong>Made for markers</strong><span>Most lessons use black outlines plus 2-3 colors.</span></p>
+          <p><strong>Cartoon-first</strong><span>Expect flames, characters, lettering shapes, icons, and comic details.</span></p>
+          <p><strong>Fast enough to repeat</strong><span>Most doodles should fit into 10-20 minutes.</span></p>
+        </div>
+      </div>
+    </section>
+
+    <section class="newsletter" id="newsletter" aria-labelledby="newsletter-title">
+      <div class="newsletter-pencil" aria-hidden="true"></div>
+      <p class="hand-note">A tiny creative nudge</p>
+      <h2 id="newsletter-title">A fresh doodle in your inbox.</h2>
+      <p>Coming soon: one prompt, one marker-friendly tutorial, zero pressure.</p>
+      <form class="signup-form">
+        <label class="sr-only" for="email">Email address</label>
+        <input id="email" name="email" type="email" autocomplete="email" placeholder="Newsletter coming soon" disabled>
+        <button type="submit" disabled>Coming soon</button>
+      </form>
+      <small>The daily email list is not open yet.</small>
+      <p class="form-message" role="status" aria-live="polite"></p>
+    </section>
+`;
+
+  const homeSchema = {
+    "@context": "https://schema.org",
+    "@graph": [orgNode, siteNode]
+  };
+
+  let html = page(lesson)
+    .replace('<body class="archive-tutorial doodle-site"', '<body class="home-page archive-tutorial doodle-site"')
+    .replaceAll('href="../styles.css"', 'href="styles.css"')
+    .replaceAll('src="../script.js"', 'src="script.js"')
+    .replaceAll("../assets/", "assets/")
+    .replaceAll("../library.html", "library.html")
+    .replaceAll("../index.html#about", "#about")
+    .replaceAll("../index.html", "index.html")
+    .replaceAll("Skip to the doodle", "Skip to today's doodle")
+    .replaceAll("Felt-tip marker mode", "Marker ready?")
+    .replace("  </main>", `${homeOnlySections}  </main>`);
+
+  for (const item of archiveLessons) {
+    if (item.slug) {
+      html = html.replaceAll(`href="${item.slug}.html"`, `href="tutorials/${item.slug}.html"`);
+    }
+  }
+
+  html = html.replace(
+    /<script type="application\/ld\+json">[\s\S]*?<\/script>/,
+    `<script type="application/ld+json">${JSON.stringify(homeSchema, null, 2)}</script>`
+  );
+
+  return html;
+};
+
+const archiveCard = (lesson, index) => {
+  const cardColors = ["card-orange", "card-yellow", "card-red", "card-blue"];
+  return `
+        <a class="sketch-card ${cardColors[index % cardColors.length]}" href="tutorials/${lesson.slug}.html">
+          <div class="card-art">
+            <img src="assets/${lesson.finished}" alt="${lesson.finishedAlt}" loading="${index === 0 ? "eager" : "lazy"}">
+          </div>
+          <p><time datetime="${lesson.isoDate}">${lesson.date.replace(/^[^,]+, /, "")}</time> · ${lesson.time} min · ${lesson.difficulty}</p>
+          <h2>How to draw ${lesson.subject}</h2>
+          <span class="card-link">Open tutorial <span aria-hidden="true">→</span></span>
+        </a>`;
+};
+
+const archivePage = () => {
+  const schema = {
+    "@context": "https://schema.org",
+    "@graph": [
+      orgNode,
+      siteNode,
+      {
+        "@type": "ItemList",
+        name: `${siteName} Doodle Tutorial Library`,
+        numberOfItems: archiveLessons.length,
+        itemListElement: archiveLessons.map((lesson, index) => ({
+          "@type": "ListItem",
+          position: index + 1,
+          name: `How to draw ${lesson.subject}`,
+          url: lessonUrl(lesson)
+        }))
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "Home", item: `${siteUrl}/` },
+          { "@type": "ListItem", position: 2, name: "Doodle library", item: `${siteUrl}/library.html` }
+        ]
+      }
+    ]
+  };
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Doodle Tutorial Library | Marker-Based Step-by-Step Doodles | ${siteName}</title>
+  <meta name="description" content="Browse every Doodle.day tutorial. Find bold marker-based lessons for colorful cartoon, comic, and doodle drawing ideas.">
+  <link rel="canonical" href="${siteUrl}/library.html">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="The ${siteName} Doodle Tutorial Library">
+  <meta property="og:description" content="A growing collection of practical, playful step-by-step marker doodle lessons.">
+  <meta property="og:url" content="${siteUrl}/library.html">
+  <meta property="og:image" content="${lessonImageUrl(latestLesson)}">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="theme-color" content="#f05a28">
+${iconLinks}
+  <link rel="alternate" type="application/rss+xml" title="${siteName} daily doodle feed" href="${siteUrl}/feed.xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat+Brush&family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script type="application/ld+json">${JSON.stringify(schema, null, 2)}</script>
+</head>
+<body class="library-page doodle-site">
+  <a class="skip-link" href="#tutorial-library">Skip to the doodle library</a>
+  <header class="site-header">
+    <div class="brand">
+      <img class="brand-mark" src="assets/logo-pencil.svg" alt="" width="72" height="72">
+      <a class="brand-wordmark" href="index.html" aria-label="${siteName} home"><span class="brand-name">${siteSlug}<span>.day</span></span></a>
+    </div>
+    <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span></span><span></span><span></span><span class="sr-only">Open menu</span></button>
+    <nav class="site-nav" id="site-nav" aria-label="Main navigation">
+      <a href="index.html">Today's doodle</a>
+      <a href="library.html" aria-current="page">Doodle library</a>
+      <a href="index.html#about">How it works</a>
+      <a class="nav-button" href="index.html#lesson">Start doodling</a>
+    </nav>
+  </header>
+  <main>
+    <section class="archive-hero" aria-labelledby="archive-title">
+      <div class="archive-intro">
+        <p class="eyebrow"><span>${archiveLessons.length} tutorial</span> Marker-first and cartoon-friendly</p>
+        <h1 id="archive-title" aria-label="The doodle library"><span class="headline-lead">The doodle</span> <em aria-hidden="true"><span>library</span></em></h1>
+        <p>Start anywhere. Every lesson favors bold shapes, thick outlines, bright color, and an approachable marker process.</p>
+        <a class="nav-button hero-button" href="#tutorial-library">Choose a doodle <span aria-hidden="true">↓</span></a>
+      </div>
+      <div class="archive-stack" aria-hidden="true">
+        ${archiveLessons.slice(0, 3).map((lesson) => `<div class="archive-sheet"><img src="assets/${lesson.finished}" alt=""></div>`).join("")}
+      </div>
+    </section>
+    <section class="library archive-library" id="tutorial-library" aria-labelledby="tutorial-library-title">
+      <header class="section-heading library-heading">
+        <div>
+          <p class="kicker">Pick a page</p>
+          <h2 id="tutorial-library-title">Draw your way through the days</h2>
+        </div>
+        <p class="archive-count">Newest first · ${archiveLessons.length} lesson</p>
+      </header>
+      <div class="library-grid archive-grid">
+        ${archiveLessons.map(archiveCard).join("")}
+      </div>
+    </section>
+  </main>
+  <footer class="site-footer">
+    <a class="brand footer-brand" href="index.html"><span class="brand-name">${siteSlug}<span>.day</span></span></a>
+    <p>Make a bold mark. See what happens.</p>
+    <nav aria-label="Footer navigation"><a href="index.html">Today</a><a href="library.html" aria-current="page">Library</a><a href="index.html#about">About</a><a href="mailto:hello@doodle.day">Say hello</a></nav>
+    <small>© 2026 ${siteName}</small>
+  </footer>
+  <script src="script.js"></script>
+</body>
+</html>`;
+};
+
+const feed = () => `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/">
+  <channel>
+    <title>${siteName} Daily Doodles</title>
+    <link>${siteUrl}/</link>
+    <atom:link href="${siteUrl}/feed.xml" rel="self" type="application/rss+xml" />
+    <description>One bold marker doodle prompt and practical step-by-step tutorial every day.</description>
+    <language>en-us</language>
+    <lastBuildDate>${rssPubDate(latestLesson.isoDate)}</lastBuildDate>
+${archiveLessons.map((lesson) => `    <item>
+      <title>${escapeXml(`How to draw ${lesson.subject}`)}</title>
+      <link>${lessonUrl(lesson)}</link>
+      <guid isPermaLink="true">${lessonUrl(lesson)}</guid>
+      <pubDate>${rssPubDate(lesson.isoDate)}</pubDate>
+      <description>${escapeXml(lesson.description)}</description>
+      <media:content url="${lessonImageUrl(lesson)}" medium="image" />
+    </item>`).join("\n")}
+  </channel>
+</rss>
+`;
+
+const sitemapUrls = [
+  { loc: `${siteUrl}/`, lastmod: latestLesson.isoDate, changefreq: "daily", priority: "1.0" },
+  { loc: `${siteUrl}/library.html`, lastmod: latestLesson.isoDate, changefreq: "daily", priority: "0.8" },
+  ...archiveLessons.map((lesson) => ({
+    loc: lessonUrl(lesson),
+    lastmod: lesson.isoDate,
+    changefreq: "monthly",
+    priority: "0.7"
+  }))
+];
+
+const sitemap = () => `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${sitemapUrls.map((url) => `  <url>
+    <loc>${escapeXml(url.loc)}</loc>
+    <lastmod>${url.lastmod}</lastmod>
+    <changefreq>${url.changefreq}</changefreq>
+    <priority>${url.priority}</priority>
+  </url>`).join("\n")}
+</urlset>
+`;
+
+const robots = () => `User-agent: *
+Allow: /
+Disallow: /drafts/
+
+Sitemap: ${siteUrl}/sitemap.xml
+`;
+
+await mkdir(new URL("../tutorials/", import.meta.url), { recursive: true });
+for (const lesson of lessons) {
+  await writeFile(new URL(`../tutorials/${lesson.slug}.html`, import.meta.url), page(lesson));
+}
+await writeFile(new URL("../index.html", import.meta.url), homePage(latestLesson));
+await writeFile(new URL("../library.html", import.meta.url), archivePage());
+await writeFile(new URL("../feed.xml", import.meta.url), feed());
+await writeFile(new URL("../sitemap.xml", import.meta.url), sitemap());
+await writeFile(new URL("../robots.txt", import.meta.url), robots());
+
+console.log(`Built ${lessons.length} doodle tutorial page, the homepage, the tutorial library, feed.xml, sitemap.xml, and robots.txt.`);
